@@ -1,0 +1,664 @@
+<html>
+<head>
+  <title>CG PROJECT</title>
+  <meta charset="utf-8" />
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
+</head>
+<body>
+<script>
+let petals = [];
+let bgLayer;
+//let showGrid = true;
+let maxPetals = 150;
+let spawnRate = 20;
+let raining = false; // 🌸 是否开始飘落 check if the sakura fall
+let myImg;
+let lights = [];
+let music;
+let musicPlaying = false;
+
+function preload(){
+  myImg = loadImage('RQR.jpg');
+  music = loadSound('MUSIC1.mp3');
+}
+
+function setup() {
+  createCanvas(1500, 650);
+  angleMode(DEGREES);
+  colorMode(HSB, 360, 100, 100);
+  noStroke();
+
+  // 背景层
+  bgLayer = createGraphics(width, height);
+  bgLayer.angleMode(DEGREES);
+  bgLayer.colorMode(HSB, 360, 100, 100);
+  drawBackgroundToLayer(bgLayer);
+}
+
+function draw() {  
+  image(bgLayer, 0, 0);
+  drawCharacter();  // 画人物 character
+  drawLogo();       // 画logo
+  drawTitle();
+  drawInfo();
+  image(myImg, 1375, 520, 85, 85);
+
+  drawHoverGlow({x:40, y:130, w:460, h:370}, 300);
+  drawHoverGlow({x:1265, y:20, w:140, h:140}, 210);
+
+  // 🌸 只有在 raining 时才更新花瓣 (renew petals when raining only)
+  if (raining) {
+    for (let i = petals.length - 1; i >= 0; i--) {
+      petals[i].move();
+      petals[i].display();
+      if (petals[i].y > height + 20) petals.splice(i, 1);
+    }
+  }
+
+  //🌟 发光粒子更新与显示 glow lights renew and show
+  for(let i = lights.length - 1; i >= 0; i--){
+    lights[i].update();
+    lights[i].display();
+    if(lights[i].isFinish()) lights.splice(i, 1);
+  }
+}
+
+// ========= 背景 BG ========= 
+function drawBackgroundToLayer(g) {
+for (let y = 0; y < height; y++) {
+  let inter = map(y, 0, height, 0, 1);
+  let c = lerpColor(color(270, 60, 20), color(220, 40, 60), inter);
+  g.stroke(c);
+  g.line(0, y, width, y);
+}
+
+//if (showGrid) drawGridOnGraphics(g, 10);
+
+  g.push();
+  g.translate(width / 2, height / 2);
+
+  // ===== 内圈彩色雾面环 Inner line circle of background =====
+  noiseDetail(2, 0.4);
+  let maxR = 340, stepR = 5, stepA = 5;
+  for (let r = 50; r < maxR; r += stepR) {
+    for (let a = 0; a < 360; a += stepA) {
+
+      // 🌸 固定在粉紫色调（Hue 280°–330°）set the color
+      let hueVal = map(sin(a * 2 + r * 0.3), -1, 1, 280, 330);
+
+      // 💫 稍微提升饱和度与亮度，制造柔和雾光感 increase saturation & brightness
+      let sat = map(r, 50, maxR, 60, 35);
+      let radialBright = map(r, 50, maxR, 95, 60);
+      let n = noise(cos(a * 0.1) * 2, sin(a * 0.1) * 2, r * 0.02);
+      let bright = constrain(radialBright + n * 20 - 10, 50, 95);
+
+      g.stroke(hueVal, sat, bright, 0.8);
+      g.strokeWeight(map(r, 50, maxR, 2.0, 0.4));
+
+      let x1 = r * cos(a);
+      let y1 = r * sin(a);
+      let x2 = r * cos(a + stepA);
+      let y2 = r * sin(a + stepA);
+      g.line(x1, y1, x2, y2);
+    }
+  }
+
+  g.pop();
+
+  // ===== 外圈彩灰雾光 Outer of the line circle =====
+// ===== 外圈粉紫雾光 ensure color =====
+g.push();
+g.translate(width / 2, height / 2);
+
+let outerStart = 340;
+let outerEnd = 1000;
+let stepOuterR = 3;
+let stepOuterA = 1;
+
+for (let r = outerStart; r < outerEnd; r += stepOuterR) {
+  for (let a = 0; a < 360; a += stepOuterA) {
+
+    // 🌸 色相范围固定在 290°～330° → 柔紫粉 setting the color
+    let hueVal = map(sin(a * 1.5 + r * 0.1), -1, 1, 290, 330);
+    let sat = map(r, outerStart, outerEnd, 40, 20);      // 饱和度降低一点，偏灰雾 decrease saturation
+    let radialBright = map(r, outerStart, outerEnd, 90, 55);
+    let n = noise(cos(a * 0.1) * 2, sin(a * 0.1) * 2, r * 0.02);
+    let bright = constrain(radialBright + n * 15 - 7.5, 45, 90);
+
+    g.stroke(hueVal, sat, bright, 0.45);
+    g.strokeWeight(map(r, outerStart, outerEnd, 1.3, 0.3));
+
+    let x1 = r * cos(a);
+    let y1 = r * sin(a);
+    let x2 = r * cos(a + stepOuterA);
+    let y2 = r * sin(a + stepOuterA);
+    g.line(x1, y1, x2, y2);
+    }
+  }
+g.pop();
+}
+
+// ========= 画角色函数 Character =========
+function drawCharacter(){
+  colorMode(RGB);
+  push();
+  noStroke();
+  
+  // Ribbon
+  fill(0);
+  rect(880, 200, 40, 20); rect(800, 100, 60, 20); rect(840, 120, 40, 20); rect(880, 140, 20, 40);
+  rect(820, 140, 20, 40); rect(820, 180, 60, 20); rect(780, 160, 40, 20); rect(780, 120, 20, 40);
+
+  // 头 head
+  fill(0);
+  rect(640,100, 60, 20); rect(620, 120, 20, 80); rect(640, 200, 20, 20); rect(600, 220, 40, 20); 
+  rect(620, 240, 40, 20); rect(600, 260, 40, 20); rect(620, 280, 40, 20); 
+  rect(640, 300, 20, 20); rect(660, 320, 20, 20);
+
+  rect(680, 340, 200, 20); rect(880, 320, 20, 20); rect(900, 280, 20, 60);
+  rect(920, 160, 20, 120); rect(900, 100, 20, 60); rect(860, 80, 40, 20); rect(700, 120, 80, 20);
+
+  //胡须 Beard
+  rect(920, 280, 40, 20); rect(900, 240, 20, 20); rect(940, 240, 20, 20);
+
+  //眼睛 eyes
+  fill(0);
+  rect(840, 240, 40, 40); //右 right
+  rect(700, 240, 40, 40); //左 left
+
+  //鼻子 nose
+  fill("yellow");
+  rect(800, 280, 20, 20);
+
+  // 翅膀（左）left wing
+  fill(0);
+  rect(540, 240, 60, 20); rect(520, 260, 20, 20); rect(500, 280, 20, 60); rect(520, 340, 20, 20); 
+  rect(540, 360, 40, 20); rect(580, 380, 80, 20); rect(580, 400, 40, 20);  rect(640, 400, 20, 20);
+  rect(560, 420, 20, 20);  rect(540, 440, 20, 80);  rect(560, 520, 80, 20);  rect(640, 500, 40, 20);
+  rect(660, 360, 20, 20);
+
+  // 翅膀（右）right wing
+  rect(880, 380, 120, 20);  rect(920, 340, 20, 40);  rect(920, 400, 20, 20);  rect(940, 420, 20, 20);
+  rect(960, 440, 20, 20);  rect(980, 460, 20, 60);  rect(860, 500, 20, 20);  rect(880, 520, 100, 20);
+  rect(1000, 360, 20, 20);  rect(1020, 340, 20, 20);  rect(1040, 300, 20, 40);  rect(1020, 280, 20, 20);
+  rect(1000, 260, 20, 20);
+
+  // 翅膀颜色（深）wing color (dark)
+  fill(0, 153, 204);  
+  //左上 left top side
+  rect(540, 260, 60, 20);  rect(600, 280, 20, 20);  rect(620, 300, 20, 20);
+  rect(640, 320, 20, 20);  rect(660, 340, 20, 20);  rect(600, 360, 60, 20);
+  //左下 left bottom side
+  rect(620, 400, 20, 20);  rect(580, 420, 40, 20);  rect(640, 420, 20, 40);  
+  rect(660, 460, 20, 40); rect(640, 480, 20, 20);  rect(580, 500, 60, 20);
+  //右下 right bottom side
+  rect(880, 400, 40, 20);  rect(880, 420, 20, 20);
+  rect(900, 440, 20, 40);  rect(880, 480, 20, 40);  rect(900, 500, 60, 20);
+  //右上 right top side
+  rect(920, 300, 20, 20);  rect(980, 260, 20, 40);
+  rect(960, 300, 20, 40);  rect(940, 340, 20, 40); rect(960, 360, 20, 20);
+
+  //翅膀颜色（浅）wing color (light)
+  fill(153, 230, 255);
+  //左上 left top side
+  rect(520, 280, 80, 20);  rect(520, 300, 100, 20);
+  rect(520, 320, 120, 20); rect(540, 340, 120, 20); rect(580, 360, 20, 20);
+  //左下 left bottom side
+  rect(620, 420, 20, 20); rect(560, 440, 80, 20);
+  rect(560, 460, 100, 20); rect(560, 480, 80, 20); rect(560, 500, 20, 20);
+  //右下 right bottom side
+  rect(900, 420, 40, 20); rect(920, 440, 40, 20);
+  rect(920, 460, 60, 20); rect(900, 480, 80, 20); rect(960, 500, 20, 20);
+  //右上 right top side
+  rect(980, 360, 20, 20); rect(960, 340, 60, 20);
+  rect(980, 300, 60, 40); rect(1000, 280, 20, 20);
+
+  // 裤子 Trousers
+  fill(0);
+  rect(680, 480, 80, 20); rect(680, 460, 20, 20);
+  rect(660, 420, 20, 40); rect(680, 420, 40, 20);
+
+  rect(760, 500, 80, 20); rect(840, 480, 40, 20); rect(880, 440, 20, 40);
+  rect(820, 440, 40, 20); rect(780, 460, 40, 20); rect(720, 440, 60, 20);
+
+  //裤子颜色 Color of Trousers
+  fill(255, 204, 230);
+  rect(680, 440, 40, 20); rect(700, 460, 80, 20); rect(760, 480, 80, 20); 
+  rect(820, 460, 60, 20); rect(860, 440, 20, 20); rect(680, 280, 40, 20);
+  rect(860, 280, 40, 20); rect(720, 400, 40, 20); rect(820, 400, 40, 20);
+  rect(720, 420, 140, 20); rect(780, 440, 40, 20);
+
+  //魔法棒 Magic Wand color
+  rect(900, 340, 20, 20); rect(920, 320, 20, 20); rect(940, 300, 20, 40);
+  rect(960, 240, 20, 60); rect(980, 220, 20, 40); rect(1000, 200, 20, 40);
+  rect(1020, 180, 20, 20);
+
+  //衣服颜色 color of clothes
+  fill(255, 153, 206);
+  rect(780, 380, 20, 20); rect(720, 380, 20, 20);
+  rect(840, 380, 20, 20); rect(760, 400, 60, 20);
+
+  //魔法棒 Magic Wand
+  fill(0);
+  rect(980, 180, 40, 20); rect(980, 140, 20, 40); rect(960, 120, 20, 20);
+  rect(960, 100, 60, 20); rect(1000, 80, 20, 20); rect(1020, 60, 20, 20);
+  rect(1040, 80, 20, 20); rect(1040, 100, 60, 20); rect(1080, 120, 20, 20);
+  rect(1060, 140, 20, 60); rect(1040, 180, 20, 20); rect(1020, 160, 20, 20);
+
+  // Color for magic wand
+  fill("yellow");
+  rect(980, 120, 100, 20); rect(1020, 80, 20, 40);
+  rect(1020, 140, 20, 20); rect(1000, 140, 20, 40); rect(1040, 140, 20, 40);
+  //Ribbon color
+  rect(840, 140, 40, 40);
+  //Ribbon
+  fill(255, 255, 153);
+  rect(800, 120, 40, 20); rect(800, 140, 20, 20);
+  rect(900, 160, 20, 20); rect(880, 180, 40, 20);
+
+  //衣服
+  fill(0);
+  rect(700, 380, 20, 40); rect(720, 360, 20, 20); rect(740, 380, 40, 20);
+  rect(780, 360, 20, 20); rect(800, 380, 40, 20); rect(840, 360, 20, 20);
+  rect(860, 380, 20, 60);
+
+  // 脚（右）
+  rect(820, 520, 20, 20); rect(780, 540, 40, 20); rect(760, 520, 20, 20);
+
+  // 脚（左）
+  rect(700, 500, 20, 20); rect(720, 520, 40, 20);
+
+  //肤色
+  fill(255);
+  rect(640, 120, 60, 80); rect(700, 140, 80, 100); rect(660, 200, 40, 80);
+  rect(660, 280, 20, 40); rect(640, 220, 20, 20); rect(640, 260, 20, 20);
+  rect(780, 180, 40, 100); rect(680, 300, 40, 40); rect(740, 240, 40, 40);
+  rect(720, 280, 80, 60); rect(800, 300, 20, 40); rect(820, 200, 20, 140);
+  rect(840, 200, 40, 40); rect(880, 220, 40, 20); rect(880, 240, 20, 20);
+  rect(880, 260, 40, 20); rect(840, 280, 20, 20); rect(840, 300, 60, 20);
+  rect(840, 320, 40, 20); rect(860, 100, 40, 20); rect(880, 120, 20, 20);
+  rect(680, 360, 40, 20); rect(660, 380, 40, 40); rect(740, 360, 40, 20);
+  rect(800, 360, 40, 20); rect(860, 360, 60, 20); rect(880, 340, 20, 20);
+  rect(720, 500, 40, 20); rect(780, 520, 40, 20);
+  pop();
+}
+
+function drawTitle(){
+  push();
+  noStroke();
+  fill(0);
+
+  rect(50, 140, 20, 100); rect(70, 140, 40, 20);
+  rect(110, 160, 20, 20); rect(70, 180, 40, 20);
+  
+  rect(140, 140, 60, 20); rect(160, 160, 20, 60); rect(140, 220, 60, 20);
+
+  rect(210, 140, 20, 40); rect(250, 140, 20, 40);
+  rect(230, 180, 20, 20); rect(210, 200, 20, 40); rect(250, 200, 20, 40);
+
+  rect(280, 140, 75, 20); rect(280, 160, 20, 60);
+  rect(280, 220, 75, 20); rect(300, 180, 40, 20);
+
+  rect(365, 140, 20, 100); rect(385, 220, 40, 20);
+
+  rect(50, 280, 20, 80); rect(70, 260, 40, 20);
+  rect(70, 300, 40, 20); rect(110, 280, 20, 80);
+
+  rect(140, 260, 20, 100); rect(160, 260, 40, 20); rect(160, 300, 40, 20);
+  rect(200, 280, 20, 20); rect(180, 320, 20, 20); rect(200, 340, 20, 20);
+
+  rect(230, 260, 60, 20); rect(250, 280, 20, 80);
+
+  rect(50, 380, 20, 100); rect(70, 380, 40, 20); rect(110, 400, 20, 20);
+  rect(70, 420, 40, 20); rect(110, 440, 20, 20); rect(70, 460, 40, 20);
+
+  rect(140, 380, 20, 100); rect(160, 460, 40, 20);
+  
+  rect(210, 400, 20, 60); rect(230, 380, 40, 20);
+  rect(230, 460, 40, 20); rect(270, 400, 20, 60);
+
+  rect(300, 400, 20, 60); rect(320, 380, 40, 20);
+  rect(320, 460, 40, 20); rect(360, 400, 20, 60);
+  
+  rect(390, 380, 20, 100); rect(410, 400, 20, 20);
+  rect(430, 420, 20, 20); rect(450, 400, 20, 20); rect(470, 380, 20, 100);
+
+  pop();
+}
+
+function drawLogo(){
+  push();
+  noStroke();
+  fill(27, 81, 162);
+  rect(1265, 20, 140, 140);
+
+  // 白色弯弯线 white color line
+  stroke(255);
+  strokeWeight(3);
+  strokeCap(SQUARE);
+  noFill();
+  // 起点(x1, y1)、控制点1(cx1, cy1)、控制点2(cx2, cy2)、终点(x2, y2)
+  const x1 = 1295, y1 = 55;
+  const x2 = 1375, y2 = 55;
+
+  const cx1 = 1310, cy1 = 30;
+  const cx2 = 1360, cy2 = 30;
+  bezier(x1, y1, cx1, cy1, cx2, cy2, x2,y2);
+
+  triangle(1335, 40, 1310, 60, 1360, 60);
+  line(1285, 60, 1385, 60);
+  line(1286.5, 60, 1286.5, 70);
+  line(1383.5, 60, 1383.5, 70);
+  
+  let startX = 1298.5;
+  let groupSpacing = 14.5;
+  let heightTop = 70;
+  let heightBottom = 115;
+  
+  line(1285, 70, 1300, 70);
+  line(1298.5, 70, 1298.5, 115);
+  line(1371.5, 70, 1371.5, 115);
+  
+  line(1297, 115, 1308, 115); //第一个的底部
+  line(1306.5, 70, 1306.5, 115);
+  line(1305, 70, 1316, 70);
+  line(1314.5, 70, 1314.5, 115);
+  line(1313, 115, 1324, 115); //第二个底部
+  line(1322.5, 70, 1322.5, 115);
+  line(1321, 70, 1332, 70);
+  line(1330.5, 70, 1330.5, 115);
+  line(1329, 115, 1340, 115); //第三个底部
+  line(1338.5, 70, 1338.5, 115);
+  line(1337, 70, 1348, 70);
+  line(1346.5, 70, 1346.5, 115);
+  line(1345, 115, 1356, 115); //第四个底部
+  line(1354.5, 70, 1354.5, 115);
+  line(1353, 70, 1364, 70);
+  line(1362.5, 70, 1362.5, 115);
+  line(1361, 115, 1373, 115);//第五个底部
+
+  line(1370, 70, 1385, 70);
+  line(1295, 125, 1375, 125);
+  line(1285, 135, 1385, 135);
+  line(1275, 145, 1395, 145);
+  
+  noStroke();
+  fill(0);
+  //C
+  rect(1230, 170, 15, 5); rect(1225, 175, 5, 15); rect(1230, 190, 15, 5);
+  //R
+  rect(1250, 170, 5, 25); rect(1255, 170, 10, 5); rect(1265, 175, 5, 5);
+  rect(1255, 180, 10, 5); rect(1260, 185, 5, 5); rect(1265, 190, 5, 5);
+  //E
+  rect(1275, 170, 20, 5); rect(1275, 175, 5, 15);
+  rect(1275, 190, 20, 5); rect(1280, 180, 10, 5);
+  //S
+  rect(1305, 170, 15, 5); rect(1300, 175, 5, 5);
+  rect(1305, 180, 10, 5); rect(1315, 185, 5, 5); rect(1300, 190, 15, 5);
+  //C
+  rect(1330, 170, 15, 5); rect(1325, 175, 5, 15); rect(1330, 190, 15, 5);
+  //E
+  rect(1350, 170, 20, 5); rect(1350, 175, 5, 15);
+  rect(1350, 190, 20, 5); rect(1355, 180, 10, 5);
+  //N
+  rect(1375, 170, 5, 25); rect(1380, 175, 5, 5);
+  rect(1385, 180, 5, 5); rect(1390, 170, 5, 25);
+  //D
+  rect(1400, 170, 5, 25); rect(1405, 170, 10, 5);
+  rect(1415, 175, 5, 15); rect(1405, 190, 10, 5);
+  //O
+  rect(1430, 170, 10, 5); rect(1425, 175, 5, 15);
+  rect(1440, 175, 5, 15); rect(1430, 190, 10, 5);
+
+  //I
+  rect(1190, 205, 15, 5); rect(1195, 210, 5, 15); rect(1190, 225, 15, 5);
+  //N
+  rect(1210, 205, 5, 25); rect(1215, 210, 5, 5); 
+  rect(1220, 215, 5, 5); rect(1225, 205, 5, 25);
+  //T
+  rect(1235, 205, 15, 5); rect(1240, 210, 5, 20);
+  //E
+  rect(1255, 205, 20, 5); rect(1255, 210, 5, 15);
+  rect(1255, 225, 20, 5); rect(1260, 215, 10, 5);
+  //R
+  rect(1280, 205, 5, 25); rect(1285, 205, 10, 5); rect(1295, 210, 5, 5);
+  rect(1285, 215, 10, 5); rect(1290, 220, 5, 5); rect(1295, 225, 5, 5);
+  //N
+  rect(1305, 205, 5, 25); rect(1310, 210, 5, 5);
+  rect(1315, 215, 5, 5); rect(1320, 205, 5, 25);
+  //A
+  rect(1335, 205, 10, 5); rect(1335, 215, 10, 5);
+  rect(1330, 210, 5, 20); rect(1345, 210, 5, 20);
+  //T
+  rect(1355, 205, 15, 5); rect(1360, 210, 5, 20);
+  //I
+  rect(1375, 205, 15, 5); rect(1380, 210, 5, 15); rect(1375, 225, 15, 5);
+  //O
+  rect(1400, 205, 10, 5); rect(1395, 210, 5, 15);
+  rect(1410, 210, 5, 15); rect(1400, 225, 10, 5);
+  //N
+  rect(1420, 205, 5, 25); rect(1425, 210, 5, 5);
+  rect(1430, 215, 5, 5); rect(1435, 205, 5, 25);
+  //A
+  rect(1450, 205, 10, 5); rect(1450, 215, 10, 5);
+  rect(1445, 210, 5, 20); rect(1460, 210, 5, 20);
+  //L
+  rect(1470, 205, 5, 25); rect(1475, 225, 10, 5);
+
+  //C
+  rect(1230, 240, 15, 5); rect(1225, 245, 5, 15); rect(1230, 260, 15, 5);
+  //O
+  rect(1265, 240, 10, 5); rect(1260, 245, 5, 15); rect(1275, 245, 5, 15); rect(1265, 260, 10, 5);
+  //L
+  rect(1295, 240, 5, 25); rect(1300, 260, 10, 5);
+  //L
+  rect(1325, 240, 5, 25); rect(1330, 260, 10, 5);
+  //E
+  rect(1355, 240, 20, 5); rect(1355, 245, 5, 15); rect(1355, 260, 20, 5); rect(1360, 250, 10, 5);
+  //G
+  rect(1395, 240, 15, 5); rect(1390, 245, 5, 15); rect(1400, 250, 10, 5);
+  rect(1405, 255, 5, 5); rect(1395, 260, 15, 5);
+  //E
+  rect(1425, 240, 20, 5); rect(1425, 245, 5, 15);
+  rect(1425, 260, 20, 5); rect(1430, 250, 10, 5);
+
+  //商标
+  noFill();
+  stroke(0);
+  strokeWeight(1);
+  ellipse(1455, 170, 10, 10);
+  fill(0);
+  noStroke();
+  rect(1452, 167, 1, 6); rect(1452, 167, 4, 1); rect(1456, 168, 1, 2);
+  rect(1452, 170, 4, 1); rect(1455, 171, 1, 1); rect(1456, 172, 1, 1);
+
+  pop();
+  colorMode(HSB, 360, 100, 100);  
+}
+
+// ========= 网格 =========
+/*function drawGridOnGraphics(g, size) {
+  g.push();
+  g.stroke(80);
+  g.strokeWeight(0.5);
+  for (let x = 0; x <= width; x += size) g.line(x, 0, x, height);
+  for (let y = 0; y <= height; y += size) g.line(0, y, width, y);
+  g.noStroke();
+  g.fill(100);
+  g.textSize(8);
+  for (let x = 0; x <= width; x += size * 5) g.text(x, x + 2, 10);
+  for (let y = 0; y <= height; y += size * 5) g.text(y, 2, y + 10);
+  g.pop();
+} */
+
+// 判断鼠标是否在矩形内
+function mouseInRect(x, y, w, h) {
+  return mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
+}
+
+function drawInfo(){
+  push();
+  colorMode(RGB);
+  noStroke();
+  fill(255);
+  textFont('VT323');
+  textAlign(LEFT, TOP);
+  textSize(36);
+
+  fill(0, 150);
+  rect(1100, 290, 380, 330, 8);
+  fill(0, 150);
+  rect(50, 510, 450, 110, 8);
+
+  fill(255);
+  let msg = `
+            PIXEL ART COMPETITION`
+            text(msg, 950, 260);
+  textSize(22);
+  let msg2 = `
+            Where Every Pixel Tells a Story.
+            What is Your Story?
+
+            Venue: Crescendo International College
+                   📍Room 204 
+            Date : 13th November 2025, 2PM - 5PM
+            Contact us: 012-345 6789;
+            
+                   SCAN TO REGISTER!👉`
+            text(msg2, 1020, 325);
+
+  let msg3 = `🎵 Press M to play music!🎵
+
+        🌸Tap SPACE and let the Sakura fall🌸`
+           text(msg3, 60, 530);
+           pop();
+}
+
+// 在鼠标附近画发光（加色混合）
+function drawHoverGlow(bounds, hueHSB = 300) {
+  if (!mouseInRect(bounds.x, bounds.y, bounds.w, bounds.h)) return;
+  push();
+  colorMode(HSB, 360, 100, 100);
+  blendMode(ADD);
+  noStroke();
+  // 同心圆淡入
+  for (let r = 140; r > 0; r -= 24) {
+    let b = map(r, 0, 140, 0, 80);   // 亮度由内向外衰减
+    let a = map(r, 0, 140, 0.35, 0.06); // 透明度由内向外衰减
+    fill(hueHSB, 60, b, a);
+    ellipse(mouseX, mouseY, r * 2, r * 2);
+  }
+  pop();
+}
+
+// ========= 花瓣类 =========
+class Petal {
+  constructor() {
+    this.x = random(width);
+    this.y = random(-height, 0);
+    this.dx = random(-0.5, 1);
+    this.dy = random(1, 2);
+    this.size = random(15, 25);
+    this.type = int(random(1, 4));
+    this.rot = random(0, 360);
+    this.rotSpeed = random(-0.5, 0.5);
+  }
+
+  move() {
+    this.x += this.dx + sin(frameCount * 0.02) * 0.3;
+    this.y += this.dy;
+    this.rot += this.rotSpeed;
+  }
+
+  display() {
+    push();
+    translate(this.x, this.y);
+    rotate(this.rot);
+    noStroke();
+
+    // 🌸 柔粉色系（保留粉色）
+    if (this.type == 1) fill(340, 35, 100);
+    else if (this.type == 2) fill(345, 30, 98);
+    else fill(350, 25, 95);
+
+    rotate(PI / 3);
+    if (this.type == 1) {
+      arc(0, 0, this.size * 2, this.size, 0, PI);
+      arc(0, 0, this.size * 2, this.size, PI, 2 * PI);
+    } else if (this.type == 2) {
+      arc(0, 0, this.size * 1.5, this.size * 0.7, 0, PI / 2);
+    } else {
+      ellipse(0, 0, this.size, this.size * 0.4);
+    }
+    pop();
+  }
+}
+
+// ========= 花瓣生成 =========
+function spawnPetals() {
+  if (raining && petals.length < maxPetals) {
+    let toAdd = min(spawnRate, maxPetals - petals.length);
+    for (let i = 0; i < toAdd; i++) petals.push(new Petal());
+  }
+}
+
+// ========= 鼠标发光粒子类 =========
+class LightDot{
+  constructor(x, y){
+    this.x = x;
+    this.y = y;
+    this.size = random(6, 12);
+    this.alpha = 255;
+    this.hue = random(280, 330); 
+  }
+  update(){
+    this.y -= random(0.3, 1);
+    this.alpha -= 4;
+  }
+  display(){
+    noStroke();
+    fill(this.hue, 60, 100, this.alpha/255);
+    ellipse(this.x, this.y, this.size);
+  }
+  isFinish(){
+    return this.alpha <= 0;
+  }
+}
+function mouseMoved(){
+  for(let i = 0; i<1; i++){
+    lights.push(new LightDot(mouseX + random(-5, 5), mouseY + random(-5, 5)));
+  }
+}
+
+// ========= 按键控制 =========
+function keyPressed() {
+/*  if (key === 'G' || key === 'g') {
+    showGrid = !showGrid;
+    drawBackgroundToLayer(bgLayer);
+  } */
+
+  if (key === ' ') { // 🌸 空格触发
+    raining = !raining;
+    if (raining) {
+      petals = [];
+      for (let i = 0; i < spawnRate; i++) petals.push(new Petal());
+      setInterval(spawnPetals, 3000);
+    }
+  }
+
+  if(key === 'M' || key === 'm'){
+    if(!music.isPlaying()){
+      music.loop();
+      music.setVolume(0.5);
+      musicPlaying = true;
+    } else{
+      music.pause();
+      musicPlaying = false;
+    }
+  }
+}
+</script>
+</body>
+</html>
